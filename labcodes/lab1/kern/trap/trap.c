@@ -46,6 +46,18 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
+     extern uint32_t __vectors[];
+     int i;
+     for (i = 0; i < sizeof(idt)/sizeof(struct gatedesc); i++) {
+         if(i == T_SYSCALL){
+            SETGATE(idt[i], 1, KERNEL_CS, __vectors[i], DPL_USER);//1 for trap
+         }
+         else{
+            SETGATE(idt[i], 0, KERNEL_CS, __vectors[i], DPL_KERNEL);//0 for interrupt
+         }
+     }
+     SETGATE(idt[T_SWITCH_TOK], 0, KERNEL_CS, __vectors[T_SWITCH_TOK], DPL_USER);//0 for interrupt
+     lidt(&idt_pd);
 }
 
 static const char *
@@ -133,12 +145,11 @@ print_regs(struct pushregs *regs) {
     cprintf("  ecx  0x%08x\n", regs->reg_ecx);
     cprintf("  eax  0x%08x\n", regs->reg_eax);
 }
-
+struct trapframe switchk2u, *switchu2k;
 /* trap_dispatch - dispatch based on what type of trap occurred */
 static void
 trap_dispatch(struct trapframe *tf) {
     char c;
-
     switch (tf->tf_trapno) {
     case IRQ_OFFSET + IRQ_TIMER:
         /* LAB1 YOUR CODE : STEP 3 */
@@ -147,6 +158,12 @@ trap_dispatch(struct trapframe *tf) {
          * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
+        ticks++;
+        if (ticks % TICK_NUM == 0){
+            ticks = 0;
+            print_ticks();
+            // print_trapframe(tf);
+        }
         break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
@@ -155,11 +172,38 @@ trap_dispatch(struct trapframe *tf) {
     case IRQ_OFFSET + IRQ_KBD:
         c = cons_getc();
         cprintf("kbd [%03d] %c\n", c, c);
+        if (c == '0') {
+            if ((tf->tf_cs & 3) != 0) {
+                tf->tf_cs = KERNEL_CS;
+                tf->tf_ds = tf->tf_es = tf->tf_fs = tf->tf_gs = KERNEL_DS;
+                tf->tf_eflags &= ~FL_IOPL_MASK;
+            }
+            cprintf("changed to ring 0\n");
+        }
+        if (c == '3') {
+            if ((tf->tf_cs & 3) == 0) {
+                tf->tf_cs = USER_CS;
+                tf->tf_ds = tf->tf_es = tf->tf_ss = tf->tf_fs = tf->tf_gs = USER_DS;
+                tf->tf_eflags |= FL_IOPL_MASK;
+            }
+            cprintf("changed to ring 3\n");
+        }
+        if (c == 't') {
+            print_trapframe(tf);
+        }
         break;
     //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
-    case T_SWITCH_TOU:
+
+     case T_SWITCH_TOU:
+        tf->tf_cs = USER_CS;
+        tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+        tf->tf_eflags |= FL_IOPL_MASK;
+        break;
     case T_SWITCH_TOK:
-        panic("T_SWITCH_** ??\n");
+        // panic("T_SWITCH_** ??\n");
+        tf->tf_cs = KERNEL_CS;
+        tf->tf_ds = tf->tf_es = KERNEL_DS;
+        tf->tf_eflags &= ~FL_IOPL_MASK;
         break;
     case IRQ_OFFSET + IRQ_IDE1:
     case IRQ_OFFSET + IRQ_IDE2:

@@ -37,7 +37,7 @@ kern_init(void) {
 
     //LAB1: CAHLLENGE 1 If you try to do it, uncomment lab1_switch_test()
     // user/kernel mode switch test
-    //lab1_switch_test();
+    lab1_switch_test();
 
     /* do nothing */
     while (1);
@@ -67,28 +67,46 @@ static void
 lab1_print_cur_status(void) {
     static int round = 0;
     uint16_t reg1, reg2, reg3, reg4;
+    uint32_t reg5, reg6;
     asm volatile (
             "mov %%cs, %0;"
             "mov %%ds, %1;"
             "mov %%es, %2;"
             "mov %%ss, %3;"
-            : "=m"(reg1), "=m"(reg2), "=m"(reg3), "=m"(reg4));
+            "movl %%esp, %4;"
+            "movl %%ebp, %5;"
+            : "=m"(reg1), "=m"(reg2), "=m"(reg3), "=m"(reg4), "=m"(reg5), "=m"(reg6));
     cprintf("%d: @ring %d\n", round, reg1 & 3);
     cprintf("%d:  cs = %x\n", round, reg1);
     cprintf("%d:  ds = %x\n", round, reg2);
     cprintf("%d:  es = %x\n", round, reg3);
     cprintf("%d:  ss = %x\n", round, reg4);
+    cprintf("%d:  esp = %x\n", round, reg5);
+    cprintf("%d:  ebp = %x\n", round, reg6);
     round ++;
 }
 
 static void
 lab1_switch_to_user(void) {
     //LAB1 CHALLENGE 1 : TODO
+    asm volatile(
+            "sub $0x8, %%esp;"
+            "int %0;"
+            "movl %%ebp, %%esp;"
+            :
+            :"i"(T_SWITCH_TOU)
+    );
 }
 
 static void
 lab1_switch_to_kernel(void) {
     //LAB1 CHALLENGE 1 :  TODO
+    asm volatile(
+            "int %0;"
+            "movl %%ebp, %%esp;"
+            :
+            :"i"(T_SWITCH_TOK)
+    );
 }
 
 static void
