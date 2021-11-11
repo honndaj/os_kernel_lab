@@ -1,3 +1,5 @@
 file bin/kernel
 target remote :1234
-break kern_init
+layout split
+layout regs
+b *0x7c00
